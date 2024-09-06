@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Generator</title>
+    <style>
+        .invoice-container {
+            width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid black;
+            font-family: Arial, sans-serif;
+        }
+        .invoice-header {
+            display: flex;
+            justify-content: space-between;
+        }
+        .invoice-table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        .invoice-table th, .invoice-table td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice-container" id="invoice">
+        <div id="seller-details"></div>
+        <div id="billing-details"></div>
+        <div id="shipping-details"></div>
+        <div id="order-details"></div>
+        <table class="invoice-table" id="item-details"></table>
+        <div id="total-amount"></div>
+    </div>
+    
+    <button onclick="generatePDF()">Download PDF</button>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Fetch the dynamic invoice data from the backend
+            const response = await fetch('http://localhost:3000/api/invoice');
+            const invoiceData = await response.json();
+
+            // Populate invoice details dynamically
+            document.getElementById('seller-details').innerHTML = `
+                <h2>${invoiceData.sellerDetails.name}</h2>
+                <p>${invoiceData.sellerDetails.address}</p>
+                <p>PAN: ${invoiceData.sellerDetails.panNo}</p>
+                <p>GST: ${invoiceData.sellerDetails.gstNo}</p>
+            `;
+
+            document.getElementById('billing-details').innerHTML = `
+                <h3>Billing Address</h3>
+                <p>${invoiceData.billingDetails.name}</p>
+                <p>${invoiceData.billingDetails.address}</p>
+                <p>${invoiceData.billingDetails.city}, ${invoiceData.billingDetails.state}, ${invoiceData.billingDetails.pincode}</p>
+                <p>State Code: ${invoiceData.billingDetails.stateCode}</p>
+            `;
+
+            document.getElementById('shipping-details').innerHTML = `
+                <h3>Shipping Address</h3>
+                <p>${invoiceData.shippingDetails.name}</p>
+                <p>${invoiceData.shippingDetails.address}</p>
+                <p>${invoiceData.shippingDetails.city}, ${invoiceData.shippingDetails.state}, ${invoiceData.shippingDetails.pincode}</p>
+                <p>State Code: ${invoiceData.shippingDetails.stateCode}</p>
+            `;
+
+            document.getElementById('order-details').innerHTML = `
+                <h3>Order Details</h3>
+                <p>Order No: ${invoiceData.orderDetails.orderNo}</p>
+                <p>Order Date: ${invoiceData.orderDetails.orderDate}</p>
+            `;
+
+            // Populate items table
+            let itemsHTML = `
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Unit Price</th>
+                        <th>Quantity</th>
+                        <th>Discount</th>
+                        <th>Net Amount</th>
+                        <th>Tax Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            let totalAmount = 0;
+            invoiceData.items.forEach(item => {
+                const netAmount = (item.unitPrice * item.qty) - item.discount;
+                itemsHTML += `
+                    <tr>
+                        <td>${item.description}</td>
+                        <td>${item.unitPrice}</td>
+                        <td>${item.qty}</td>
+                        <td>${item.discount}</td>
+                        <td>${netAmount}</td>
+                        <td>${item.taxRate}%</td>
+                    </tr>
+                `;
+                totalAmount += netAmount;
+            });
+            itemsHTML += '</tbody>';
+            document.getElementById('item-details').innerHTML = itemsHTML;
+
+            document.getElementById('total-amount').innerHTML = `<h3>Total Amount: ₹${totalAmount}</h3>`;
+        });
+
+        function generatePDF() {
+            const invoice = document.getElementById('invoice');
+            html2canvas(invoice).then((canvas) => {
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const imgWidth = 210;
+                const pageHeight = 295;
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+
+                pdf.save('invoice.pdf');
+            });
+        }
+    </script>
+</body>
+</html>
